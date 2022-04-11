@@ -1,10 +1,19 @@
+/*
+ * @Author: your name
+ * @Date: 2022-04-06 16:45:33
+ * @LastEditTime: 2022-04-08 14:16:14
+ * @LastEditors: Please set LastEditors
+ * @Description: 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ * @FilePath: \three-forcegraph\src\utils\dagDepths.js
+ */
 export default function({ nodes, links }, idAccessor, {
   nodeFilter = () => true,
-  onLoopError = loopIds => { throw `Invalid DAG structure! Found cycle in node path: ${loopIds.join(' -> ')}.` }
+
+  onLoopError = loopIds => { throw `qqqqq Invalid DAG structure! Found cycle in node path: ${loopIds.join(' -> ')}.` }
 } = {}) {
   // linked graph
   const graph = {};
-
+  console.log("wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww")
   nodes.forEach(node => graph[idAccessor(node)] = { data: node, out : [], depth: -1, skip: !nodeFilter(node) });
   links.forEach(({ source, target }) => {
     const sourceId = getNodeId(source);

@@ -67,6 +67,7 @@ import getDagDepths from './utils/dagDepths';
 const DAG_LEVEL_NODE_RATIO = 2;
 
 // support multiple method names for backwards threejs compatibility
+// 支持多个方法名以实现向后兼容
 const setAttributeFn = new three.BufferGeometry().setAttribute ? 'setAttribute' : 'addAttribute';
 const applyMatrix4Fn = new three.BufferGeometry().applyMatrix4 ? 'applyMatrix4' : 'applyMatrix';
 
@@ -74,6 +75,12 @@ export default Kapsule({
 
   props: {
     jsonUrl: {
+      /**
+       * 启用导航控件,重新刷新图像
+       * @param {*} jsonUrl  节点的nodes和links
+       * @param {*} state 
+       * @return 
+       */
       onChange: function(jsonUrl, state) {
         if (jsonUrl && !state.fetchingJson) {
           // Load data asynchronously
@@ -101,8 +108,10 @@ export default Kapsule({
     numDimensions: {
       default: 3,
       onChange(numDim, state) {
+        // ---charge forceManyBody 多体力
         const chargeForce = state.d3ForceLayout.force('charge');
         // Increase repulsion on 3D mode for improved spatial separation
+        // 增加3D模式上的斥力以改善空间分离
         if (chargeForce) { chargeForce.strength(numDim > 2 ? -60 : -30) }
 
         if (numDim < 3) { eraseDimension(state.graphData.nodes, 'z'); }
