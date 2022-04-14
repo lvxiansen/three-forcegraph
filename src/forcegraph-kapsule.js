@@ -76,9 +76,9 @@ export default Kapsule({
   props: {
     jsonUrl: {
       /**
-       * 启用导航控件,重新刷新图像
+       * 重新刷新图像,当发生变化时，重新渲染图像
        * @param {*} jsonUrl  节点的nodes和links
-       * @param {*} state 
+       * @param {*} state  state为此时框架的各个参数状态
        * @return 
        */
       onChange: function(jsonUrl, state) {
@@ -86,7 +86,6 @@ export default Kapsule({
           // Load data asynchronously
           state.fetchingJson = true;
           state.onLoading();
-
           fetch(jsonUrl).then(r => r.json()).then(json => {
             state.fetchingJson = false;
             state.onFinishLoading(json);
@@ -102,6 +101,7 @@ export default Kapsule({
         links: []
       },
       onChange(graphData, state) {
+        //立即暂停模拟
         state.engineRunning = false; // Pause simulation immediately
       }
     },
@@ -113,7 +113,7 @@ export default Kapsule({
         // Increase repulsion on 3D mode for improved spatial separation
         // 增加3D模式上的斥力以改善空间分离
         if (chargeForce) { chargeForce.strength(numDim > 2 ? -60 : -30) }
-
+        // console.log(state)
         if (numDim < 3) { eraseDimension(state.graphData.nodes, 'z'); }
         if (numDim < 2) { eraseDimension(state.graphData.nodes, 'y'); }
 
@@ -125,6 +125,8 @@ export default Kapsule({
         }
       }
     },
+    //基于图形方向性应用布局约束。仅适用于 DAG 图结构（无循环）
+    //禁用dag模式时取消固定节点
     dagMode: { onChange(dagMode, state) { // td, bu, lr, rl, zin, zout, radialin, radialout
       !dagMode && state.forceEngine === 'd3' && (state.graphData.nodes || []).forEach(n => n.fx = n.fy = n.fz = undefined); // unfix nodes when disabling dag mode
     }},
@@ -190,12 +192,17 @@ export default Kapsule({
   },
 
   methods: {
+    //外部暴露接口
+    //重绘所有节点/链接
     refresh: function(state) {
       state._flushObjects = true;
       state._rerender();
       return this;
     },
+    //外部暴露接口
     // Expose d3 forces for external manipulation
+    // 暴露d3力进行外部操纵
+    // 用于控制 d3 模拟引擎的内力的获取器/设置器 
     d3Force: function(state, forceName, forceFn) {
       if (forceFn === undefined) {
         return state.d3ForceLayout.force(forceName); // Force getter
@@ -203,18 +210,23 @@ export default Kapsule({
       state.d3ForceLayout.force(forceName, forceFn); // Force setter
       return this;
     },
+    //外部暴露接口
+    //通过将 alpha 值设置为 1 来重新加热力模拟引擎。仅在使用 d3 模拟引擎时适用
     d3ReheatSimulation: function(state) {
       state.d3ForceLayout.alpha(1);
       this.resetCountdown();
       return this;
     },
+    //非外部暴露接口
     // reset cooldown state
+    // 重置冷却状态
     resetCountdown: function(state) {
       state.cntTicks = 0;
       state.startTickTime = new Date();
       state.engineRunning = true;
       return this;
     },
+    //非外部暴露接口
     tickFrame: function(state) {
       const isD3Sim = state.forceEngine !== 'ngraph';
 
@@ -224,26 +236,33 @@ export default Kapsule({
 
       return this;
 
-      //
-
+      //会在走向布局时不断调用
       function layoutTick() {
         if (
+          //d3AlphaMin:模拟 alpha min 参数的 getter/setter，仅在使用 d3 模拟引擎时适用
           ++state.cntTicks > state.cooldownTicks ||
           (new Date()) - state.startTickTime > state.cooldownTime ||
           (isD3Sim && state.d3AlphaMin > 0 && state.d3ForceLayout.alpha() < state.d3AlphaMin)
         ) {
           state.engineRunning = false; // Stop ticking graph
+          //节点冷却完毕后会输出aaaaa.但是当拖动节点时，仍会重新输出bbbbb,再次徐楠。
+          // console.log("aaaaa");
+          //当模拟引擎停止并且布局被冻结时调用的回调函数
           state.onEngineStop();
         } else {
           state.layout[isD3Sim ? 'tick' : 'step'](); // Tick it
+          //有节点晃动时会以很高的频率输出bbbbb，直到节点冷却完毕
+          // console.log("bbbbb");
+          //在模拟引擎的每个滴答声中调用的回调函数
           state.onEngineTick();
         }
-
         // Update nodes position
+        //更新点位置
         state.graphData.nodes.forEach(node => {
           const obj = node.__threeObj;
           if (!obj) return;
 
+          //getNodePosition是ngraph独有的获取节点位置方法
           const pos = isD3Sim ? node : state.layout.getNodePosition(node[state.nodeId]);
 
           obj.position.x = pos.x;
@@ -252,9 +271,12 @@ export default Kapsule({
         });
 
         // Update links position
+        //更新连线位置
+        //accessorFn:使用 accessorFn 通过属性字符串或转换函数访问对象值
         const linkWidthAccessor = accessorFn(state.linkWidth);
         const linkCurvatureAccessor = accessorFn(state.linkCurvature);
         const linkCurveRotationAccessor = accessorFn(state.linkCurveRotation);
+        //在使用自定义 linkThreeObject 时替换默认链接 (false) 还是扩展它 (true)
         const linkThreeObjectExtendAccessor = accessorFn(state.linkThreeObjectExtend);
         state.graphData.links.forEach(link => {
           const lineObj = link.__lineObj;
@@ -267,7 +289,8 @@ export default Kapsule({
           const end = pos[isD3Sim ? 'target' : 'to'];
 
           if (!start || !end || !start.hasOwnProperty('x') || !end.hasOwnProperty('x')) return; // skip invalid link
-
+          
+          //计算所有链接（包括自定义替换）的链接曲线，以便在定向功能中使用
           calcLinkCurve(link); // calculate link curve for all links, including custom replaced, so it can be used in directional functionality
 
           const extendedObj = linkThreeObjectExtendAccessor(link);
@@ -276,14 +299,17 @@ export default Kapsule({
               { start: { x: start.x, y: start.y, z: start.z }, end: { x: end.x, y: end.y, z: end.z } },
               link)
           && !extendedObj) {
+            //如果成功自定义更新非扩展obj的位置，则退出
             // exit if successfully custom updated position of non-extended obj
             return;
           }
 
+          // Resolution越高则线或节点越圆滑，如果设为零则节点为不规则图形
           const curveResolution = 30; // # line segments
           const curve = link.__curve;
 
           // select default line obj if it's an extended group
+          // 如果是扩展组，请选择默认连线obj
           const line = lineObj.children.length ? lineObj.children[0] : lineObj;
 
           if (line.type === 'Line') { // Update line geometry
@@ -306,7 +332,7 @@ export default Kapsule({
               line.geometry.setFromPoints(curve.getPoints(curveResolution));
             }
             line.geometry.computeBoundingSphere();
-
+          //更新圆柱体几何图形
           } else if (line.type === 'Mesh') { // Update cylinder geometry
 
             if (!curve) { // straight tube
@@ -354,7 +380,7 @@ export default Kapsule({
         });
 
         //
-
+        //用于沿线轴旋转以应用于曲线
         function calcLinkCurve(link) {
           const pos = isD3Sim
             ? link
@@ -410,6 +436,7 @@ export default Kapsule({
         }
       }
 
+      //更新链接箭头位置
       function updateArrows() {
         // update link arrow position
         const arrowRelPosAccessor = accessorFn(state.linkDirectionalArrowRelPos);
@@ -463,6 +490,7 @@ export default Kapsule({
         });
       }
 
+      //更新链接粒子位置
       function updatePhotons() {
         // update link particle positions
         const particleSpeedAccessor = accessorFn(state.linkDirectionalParticleSpeed);
@@ -524,6 +552,8 @@ export default Kapsule({
         });
       }
     },
+    //作为生成粒子的替代机制，此方法在特定链接中发射非循环单个粒子。
+    //发射的粒子共享常规粒子道具的样式（速度、宽度、颜色）
     emitParticle: function(state, link) {
       if (link) {
         if (!link.__singleHopPhotonsObj) {
@@ -556,10 +586,13 @@ export default Kapsule({
 
       return this;
     },
+    
+    //返回图中节点的当前边界框.对于计算图的一部分的边界框很有用.
     getGraphBbox: function(state, nodeFilter = () => true) {
       if (!state.initialised) return null;
 
       // recursively collect all nested geometries bboxes
+      //递归地收集所有嵌套的几何图形B盒
       const bboxes = (function getBboxes(obj) {
         const bboxes = [];
 
@@ -599,11 +632,15 @@ export default Kapsule({
   }),
 
   init(threeObj, state) {
+    //要操纵的three对象
     // Main three object to manipulate
     state.graphScene = threeObj;
   },
 
+  //用于创建或更新各种节点和连线
   update(state, changedProps) {
+    //some() 方法测试数组中是不是至少有1个元素通过了被提供的函数测试
+    // hasAnyPropChanged是一个函数，这里是定义了这个函数
     const hasAnyPropChanged = propList => propList.some(p => changedProps.hasOwnProperty(p));
 
     state.engineRunning = false; // pause simulation
@@ -611,14 +648,18 @@ export default Kapsule({
 
     if (state.nodeAutoColorBy !== null && hasAnyPropChanged(['nodeAutoColorBy', 'graphData', 'nodeColor'])) {
       // Auto add color to uncolored nodes
+      //自动为未着色的节点添加颜色
       autoColorObjects(state.graphData.nodes, accessorFn(state.nodeAutoColorBy), state.nodeColor);
     }
     if (state.linkAutoColorBy !== null && hasAnyPropChanged(['linkAutoColorBy', 'graphData', 'linkColor'])) {
       // Auto add color to uncolored links
+      //自动添加未着色的颜色链接
       autoColorObjects(state.graphData.links, accessorFn(state.linkAutoColorBy), state.linkColor);
     }
 
     // Digest nodes WebGL objects
+    // WebGL对象摘要节点
+    // 对于节点形状的操作,其实就是生成小球的
     if (state._flushObjects || hasAnyPropChanged([
       'graphData',
       'nodeThreeObject',
@@ -633,18 +674,19 @@ export default Kapsule({
       const customObjectAccessor = accessorFn(state.nodeThreeObject);
       const customObjectExtendAccessor = accessorFn(state.nodeThreeObjectExtend);
       const valAccessor = accessorFn(state.nodeVal);
+      //  console.log(state.nodeVal)
       const colorAccessor = accessorFn(state.nodeColor);
       const visibilityAccessor = accessorFn(state.nodeVisibility);
 
       const sphereGeometries = {}; // indexed by node value
       const sphereMaterials = {}; // indexed by color
-
       threeDigest(
         state.graphData.nodes.filter(visibilityAccessor),
         state.graphScene,
         {
           purge: state._flushObjects || hasAnyPropChanged([
             // recreate objects if any of these props have changed
+            //如果这些属性中的任何一个发生了变化，请重新创建对象
             'nodeThreeObject',
             'nodeThreeObjectExtend'
           ]),
@@ -652,14 +694,15 @@ export default Kapsule({
           createObj: node => {
             let customObj = customObjectAccessor(node);
             const extendObj = customObjectExtendAccessor(node);
-
             if (customObj && state.nodeThreeObject === customObj) {
               // clone object if it's a shared object among all nodes
+              //克隆对象（如果它是所有节点之间的共享对象）
               customObj = customObj.clone();
             }
 
             let obj;
-
+            
+            //如果obj有，则clone.否则新建一个three对象
             if (customObj && !extendObj) {
               obj = customObj;
             } else { // Add default object (sphere mesh)
@@ -677,7 +720,9 @@ export default Kapsule({
           },
           updateObj: (obj, node) => {
             if (obj.__graphDefaultObj) { // bypass internal updates for custom node objects
+              //绕过自定义节点对象的内部更新
               const val = valAccessor(node) || 1;
+              //  console.log(valAccessor);
               const radius = Math.cbrt(val) * state.nodeRelSize;
               const numSegments = state.nodeResolution;
 
@@ -694,6 +739,7 @@ export default Kapsule({
               }
 
               const color = colorAccessor(node);
+              // console.log(color);
               const materialColor = new three.Color(colorStr2Hex(color || '#ffffaa'));
               const opacity = state.nodeOpacity * colorAlpha(color);
 
@@ -719,6 +765,7 @@ export default Kapsule({
     }
 
     // Digest links WebGL objects
+    // 对连接进行操作
     if (state._flushObjects || hasAnyPropChanged([
       'graphData',
       'linkThreeObject',
@@ -873,6 +920,7 @@ export default Kapsule({
       );
 
       // Arrows digest cycle
+      // 对箭头粒子进行设置
       if (state.linkDirectionalArrowLength || changedProps.hasOwnProperty('linkDirectionalArrowLength')) {
         const arrowLengthAccessor = accessorFn(state.linkDirectionalArrowLength);
         const arrowColorAccessor = accessorFn(state.linkDirectionalArrowColor);
@@ -914,6 +962,7 @@ export default Kapsule({
       }
 
       // Photon particles digest cycle
+      //光子粒子概要循环
       if (state.linkDirectionalParticles || changedProps.hasOwnProperty('linkDirectionalParticles')) {
         const particlesAccessor = accessorFn(state.linkDirectionalParticles);
         const particleWidthAccessor = accessorFn(state.linkDirectionalParticleWidth);
@@ -1001,6 +1050,7 @@ export default Kapsule({
     state._flushObjects = false; // reset objects refresh flag
 
     // simulation engine
+    // 对仿真引擎进行操作，也属于update范围
     if (hasAnyPropChanged([
       'graphData',
       'nodeId',
@@ -1021,17 +1071,19 @@ export default Kapsule({
       });
 
       // Feed data to force-directed layout
+      // 将数据馈送到力导引布局
       const isD3Sim = state.forceEngine !== 'ngraph';
       let layout;
       if (isD3Sim) {
         // D3-force
         (layout = state.d3ForceLayout)
           .stop()
-          .alpha(1)// re-heat the simulation
+          .alpha(1)// re-heat the simulation 重新加热模拟
           .numDimensions(state.numDimensions)
           .nodes(state.graphData.nodes);
 
         // add links (if link force is still active)
+        // 添加链接（如果链接力仍处于活动状态）
         const linkForce = state.d3ForceLayout.force('link');
         if (linkForce) {
           linkForce
@@ -1040,6 +1092,8 @@ export default Kapsule({
         }
 
         // setup dag force constraints
+        // 设置dag力约束
+        // 返回每个节点和它的深度的对象
         const nodeDepths = state.dagMode && getDagDepths(
           state.graphData,
           node => node[state.nodeId],
@@ -1048,13 +1102,17 @@ export default Kapsule({
             onLoopError: state.onDagError || undefined
           }
         );
+        //获取nodeDepths所有对象的值并将之转化为数组，获得最大深度
         const maxDepth = Math.max(...Object.values(nodeDepths || []));
+        //如果设置了dagLevelDistance，则取。否则计算。
+        // indexOf()方法返回在数组中可以找到一个给定元素(state.dagMode)的第一个索引，如果不存在，则返回-1
         const dagLevelDistance = state.dagLevelDistance || (
           state.graphData.nodes.length / (maxDepth || 1) * DAG_LEVEL_NODE_RATIO
           * (['radialin', 'radialout'].indexOf(state.dagMode) !== -1 ? 0.7 : 1)
         );
 
         // Fix nodes to x,y,z for dag mode
+        // 对于dag模式，将节点固定到x、y、z
         if (state.dagMode) {
           const getFFn = (fix, invert) => node => !fix
             ? undefined
@@ -1063,7 +1121,6 @@ export default Kapsule({
           const fxFn = getFFn(['lr', 'rl'].indexOf(state.dagMode) !== -1, state.dagMode === 'rl');
           const fyFn = getFFn(['td', 'bu'].indexOf(state.dagMode) !== -1, state.dagMode === 'td');
           const fzFn = getFFn(['zin', 'zout'].indexOf(state.dagMode) !== -1, state.dagMode === 'zout');
-
           state.graphData.nodes.filter(state.dagNodeFilter).forEach(node => {
             node.fx = fxFn(node);
             node.fy = fyFn(node);
@@ -1072,14 +1129,22 @@ export default Kapsule({
         }
 
         // Use radial force for radial dags
+        // 对径向DAG使用径向力,也就是环形布局
         state.d3ForceLayout.force('dagRadial',
+        //是这两个力indexof返回0或1，则不等于-1.进入正确逻辑。
           ['radialin', 'radialout'].indexOf(state.dagMode) !== -1
             ? d3ForceRadial(node => {
+                //state.nodeId是id属性，默认示例里是 path
+                //node[state.nodeId] 即 获得路径名
+                //nodeDepths[node[state.nodeId]]获得深度
+                // dagNodeFilter用于指定在 DAG 布局处理期间要忽略的节点
                 const nodeDepth = nodeDepths[node[state.nodeId]] || -1;
                 return (state.dagMode === 'radialin' ? maxDepth - nodeDepth : nodeDepth) * dagLevelDistance;
               })
               .strength(node => state.dagNodeFilter(node) ? 1 : 0)
-            : null
+            //这里是径向力是局部的
+            : d3ForceRadial(200)
+            .strength(0.1)//d3ForceRadial().strength(node => state.dagNodeFilter(node) ? 1 : 0)
         );
       } else {
         // ngraph
@@ -1096,8 +1161,8 @@ export default Kapsule({
         i++
       ) {
         layout[isD3Sim ? "tick" : "step"]();
-      } // Initial ticks before starting to render
-
+      } // Initial ticks before starting to render开始渲染前的初始滴答声
+      
       state.layout = layout;
       this.resetCountdown();
     }
