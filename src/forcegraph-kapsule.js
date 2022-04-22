@@ -674,7 +674,6 @@ export default Kapsule({
       const customObjectAccessor = accessorFn(state.nodeThreeObject);
       const customObjectExtendAccessor = accessorFn(state.nodeThreeObjectExtend);
       const valAccessor = accessorFn(state.nodeVal);
-      //  console.log(state.nodeVal)
       const colorAccessor = accessorFn(state.nodeColor);
       const visibilityAccessor = accessorFn(state.nodeVisibility);
 
@@ -722,7 +721,6 @@ export default Kapsule({
             if (obj.__graphDefaultObj) { // bypass internal updates for custom node objects
               //绕过自定义节点对象的内部更新
               const val = valAccessor(node) || 1;
-              //  console.log(valAccessor);
               const radius = Math.cbrt(val) * state.nodeRelSize;
               const numSegments = state.nodeResolution;
 
@@ -739,7 +737,6 @@ export default Kapsule({
               }
 
               const color = colorAccessor(node);
-              // console.log(color);
               const materialColor = new three.Color(colorStr2Hex(color || '#ffffaa'));
               const opacity = state.nodeOpacity * colorAlpha(color);
 
@@ -1094,14 +1091,18 @@ export default Kapsule({
         // setup dag force constraints
         // 设置dag力约束
         // 返回每个节点和它的深度的对象
+        // 中括号代表非必须
+        // console.log(state.nodeId)
         const nodeDepths = state.dagMode && getDagDepths(
           state.graphData,
           node => node[state.nodeId],
           {
             nodeFilter: state.dagNodeFilter,
+            //如果主框架为node=>false,则state.onDagError接收传进来的false
             onLoopError: state.onDagError || undefined
           }
         );
+        console.log("nodeDepth:",nodeDepths)
         //获取nodeDepths所有对象的值并将之转化为数组，获得最大深度
         const maxDepth = Math.max(...Object.values(nodeDepths || []));
         //如果设置了dagLevelDistance，则取。否则计算。
@@ -1117,11 +1118,11 @@ export default Kapsule({
           const getFFn = (fix, invert) => node => !fix
             ? undefined
             : (nodeDepths[node[state.nodeId]] - maxDepth / 2) * dagLevelDistance * (invert ? -1 : 1);
-
           const fxFn = getFFn(['lr', 'rl'].indexOf(state.dagMode) !== -1, state.dagMode === 'rl');
           const fyFn = getFFn(['td', 'bu'].indexOf(state.dagMode) !== -1, state.dagMode === 'td');
           const fzFn = getFFn(['zin', 'zout'].indexOf(state.dagMode) !== -1, state.dagMode === 'zout');
           state.graphData.nodes.filter(state.dagNodeFilter).forEach(node => {
+            node['depth'] = nodeDepths[node[state.nodeId]]
             node.fx = fxFn(node);
             node.fy = fyFn(node);
             node.fz = fzFn(node);
@@ -1130,6 +1131,9 @@ export default Kapsule({
 
         // Use radial force for radial dags
         // 对径向DAG使用径向力,也就是环形布局
+        // 得出最终布局有两步，第一步是获得各点层次位置，第二步是对各点进行相应的布局
+        // 相应的布局各个力都行，使用圆环布局最好
+        // 为什么使用其他布局也能是分散的圆形？因为各点层次固定后，与其上方节点的位置也是固定的
         state.d3ForceLayout.force('dagRadial',
         //是这两个力indexof返回0或1，则不等于-1.进入正确逻辑。
           ['radialin', 'radialout'].indexOf(state.dagMode) !== -1
@@ -1137,13 +1141,14 @@ export default Kapsule({
                 //state.nodeId是id属性，默认示例里是 path
                 //node[state.nodeId] 即 获得路径名
                 //nodeDepths[node[state.nodeId]]获得深度
-                // dagNodeFilter用于指定在 DAG 布局处理期间要忽略的节点
+                // dagNodeFilter用于指定在 DAG 布局处理期间要忽略的节点,traverse时计算，为false则忽略
                 const nodeDepth = nodeDepths[node[state.nodeId]] || -1;
                 return (state.dagMode === 'radialin' ? maxDepth - nodeDepth : nodeDepth) * dagLevelDistance;
               })
               .strength(node => state.dagNodeFilter(node) ? 1 : 0)
             //这里是径向力是局部的
             : d3ForceRadial(200)
+
             .strength(0.1)//d3ForceRadial().strength(node => state.dagNodeFilter(node) ? 1 : 0)
         );
       } else {
