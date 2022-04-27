@@ -1102,7 +1102,7 @@ export default Kapsule({
             onLoopError: state.onDagError || undefined
           }
         );
-        console.log("nodeDepth:",nodeDepths)
+        // console.log("--nodeDepth:",nodeDepths)
         //获取nodeDepths所有对象的值并将之转化为数组，获得最大深度
         const maxDepth = Math.max(...Object.values(nodeDepths || []));
         //如果设置了dagLevelDistance，则取。否则计算。
@@ -1148,6 +1148,7 @@ export default Kapsule({
               .strength(node => state.dagNodeFilter(node) ? 1 : 0)
             //这里是径向力是局部的
             : d3ForceRadial(200)
+            // : d3ForceCenter(0,0)
 
             .strength(0.1)//d3ForceRadial().strength(node => state.dagNodeFilter(node) ? 1 : 0)
         );

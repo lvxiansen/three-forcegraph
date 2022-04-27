@@ -8,6 +8,8 @@
 /*
   用于获得各节点深度
  */
+import _ from 'lodash'
+import { JsxEmit } from 'typescript';
 export default function({ nodes, links }, idAccessor, {
   /**
    * 用于指定在 DAG 布局处理期间要忽略的节点。
@@ -23,7 +25,7 @@ export default function({ nodes, links }, idAccessor, {
    * 这里的onLoopError是默认情况下的处理方法，如果声明了state.onDagError则不进入此逻辑
    * 如果onLoopError有传参，则调用传进来的参数函数 
   */
-  onLoopError = loopIds => { throw `wwqqwww Invalid DAG structure! Found cycle in node path: ${loopIds.join(' -> ')}.` }
+  onLoopError = loopIds => { throw `qqqqq Invalid DAG structure! Found cycle in node path: ${loopIds.join(' -> ')}.` }
 } = {}) {
   /** 
    * linked graph
@@ -39,6 +41,9 @@ export default function({ nodes, links }, idAccessor, {
    */
   nodes.forEach(node => graph[idAccessor(node)] = { data: node, out : [], depth: -1, skip: !nodeFilter(node) });
   
+  console.log("nodes:--------------",nodes)
+  console.log("links:--------------",links)
+
   /**
    * 得到每个节点的out，如果某个节点为单个节点，则其out为空
    */
@@ -63,8 +68,12 @@ export default function({ nodes, links }, idAccessor, {
    */
   // 发现的环数组
   //Object.values返回 对象的 可枚举属性 的 值 组成的数组
-  const foundLoops = [];   
-  traverse(Object.values(graph)); 
+  const foundLoops = [];
+  console.log("!!!!!!!!!!!!!!!!!")
+  // removeEdge(Object.values(graph))
+  console.log("@@@@@@@@@@@@")
+  //traverse(Object.values(graph)); 
+  fixByHard(Object.values(graph))
   
  /**
    * 过滤掉要skip的节点以及返回{节点：层次}的对象
@@ -80,6 +89,97 @@ export default function({ nodes, links }, idAccessor, {
   // console.log(nodeDepths)
   nodes.forEach(node=>node['out'] = Array.from(new Set(graph[idAccessor(node)].out)))
   return nodeDepths;
+
+  function fixByHard(nodes) {
+    let devnetFilterRule = new Map()
+    let devtypeFilterRule = new Map()
+    // devnetFilterRule.set([1,16],16)
+    // devnetFilterRule.set([1,17],15)
+    // devnetFilterRule.set([1,4],14)
+    // devnetFilterRule.set([1,35],13)
+
+    // devnetFilterRule.set([4,16],12)
+    // devnetFilterRule.set([4,17],11)
+    // devnetFilterRule.set([4,4],10)
+    // devnetFilterRule.set([4,35],9)
+
+    // devnetFilterRule.set([8,16],8)
+    // devnetFilterRule.set([8,17],7)
+    // devnetFilterRule.set([8,4],6)
+    // devnetFilterRule.set([8,35],5)
+
+    // devnetFilterRule.set([10,16],4)
+    // devnetFilterRule.set([10,17],3)
+    // devnetFilterRule.set([10,4],2)
+    // devnetFilterRule.set([10,35],1)
+    devnetFilterRule.set(1,4)
+    devnetFilterRule.set(4,3)
+    devnetFilterRule.set(8,2)
+    devnetFilterRule.set(10,1)
+
+    devtypeFilterRule.set(17,4)
+    devtypeFilterRule.set(16,3)
+    devtypeFilterRule.set(4,2)
+    devtypeFilterRule.set(35,1)
+
+    var nettypeObject = []
+    for (let i=0, l=nodes.length; i<l; i++) {
+      nettypeObject.push({dev_net:nodes[i].data.dev_net,dev_type:nodes[i].data.dev_type})
+    }
+    var nettypeUniq = _.uniqWith(nettypeObject,function(a,b){
+      return a.dev_net===b.dev_net && a.dev_type ===b.dev_type
+    })
+    console.log(nettypeUniq);
+    var layerMap = new Map()
+    nettypeUniq.sort(function(a,b){
+      if (a.dev_net == b.dev_net) {
+        return devtypeFilterRule.get(b.dev_type) - devtypeFilterRule.get(a.dev_type)
+      } else {
+        return devnetFilterRule.get(b.dev_net) - devnetFilterRule.get(a.dev_net)
+      }
+    })
+
+    nettypeUniq.forEach(function(element,index){
+      layerMap.set(element.dev_net+","+element.dev_type,index)
+    })
+    for (let i=0, l=nodes.length; i<l; i++) {
+      const node = nodes[i];
+      node.depth = layerMap.get(node.data.dev_net+","+node.data.dev_type)
+    }
+  }
+  function removeEdge(nodes, visited = [],nodeStack = []) {
+    console.log("start")
+    if (visited.length == nodes.length) {
+      return
+    }
+    for (let i=0, l=nodes.length; i<l; i++) {
+      const node = nodes[i];
+      if (visited[node] == true) {
+        continue
+      }
+      visited[node] = true
+      if (nodeStack.indexOf(node) !== -1) {
+        const startNodeIndex = nodeStack.indexOf(node)
+        const EndNodeIndex = nodeStack.length-1
+        if (nodeStack[startNodeIndex].dev_net > nodeStack[EndNodeIndex].dev_net) {
+          continue
+        } else if (nodeStack[startNodeIndex].dev_net < nodeStack[EndNodeIndex].dev_net) {
+          nodeStack.splice(startNodeIndex,1)
+          nodeStack = [...nodeStack, node]
+        } else {
+          if (nodeStack[startNodeIndex].dev_type > nodeStack[EndNodeIndex].dev_type) {
+            continue
+          } else {
+            nodeStack.splice(startNodeIndex,1)
+            nodeStack = [...nodeStack, node]
+          }
+        }
+        continue;
+      }
+      removeEdge(node.out, [...nodeStack, node])
+      console.log(visited)
+    }
+  }
   function traverse(nodes, nodeStack = [], currentDepth = 0) {
     // console.log(nodes)
     for (let i=0, l=nodes.length; i<l; i++) {
@@ -99,39 +199,39 @@ export default function({ nodes, links }, idAccessor, {
        * 就在foundLoops中添加此loop,即要保证foundLoops中的循环数组为去重后的
        */
       if (nodeStack.indexOf(node) !== -1) {
-        // console.log("start:",nodeStack)
-        // slice返回一个新的数组对象，以begin开始 ，是包括begin的
-        // map() 方法返回一个新数组，数组中的元素为原始数组元素调用函数处理后的值
-        //  some() 方法测试数组中是不是至少有1个元素通过了被提供的函数测试。
-        //every() 方法测试一个数组内的所有元素是否都能通过某个指定函数的测试
-        const startNodeIndex = nodeStack.indexOf(node)
-        const EndNodeIndex = nodeStack.length-1
-        // console.log("startNodeIndex:",startNodeIndex)
-        // console.log("EndNodeIndex:",EndNodeIndex)
-        if (nodeStack[startNodeIndex].dev_net > nodeStack[EndNodeIndex].dev_net) {
-          continue
-          // nodeStack.splice(EndNodeIndex,1)
-        } else if (nodeStack[startNodeIndex].dev_net < nodeStack[EndNodeIndex].dev_net) {
-          nodeStack.splice(startNodeIndex,1)
-          nodeStack = [...nodeStack, node]
-        } else {
-          if (nodeStack[startNodeIndex].dev_type > nodeStack[EndNodeIndex].dev_type) {
-            continue
-            // nodeStack.splice(EndNodeIndex,1)
-          } else {
-            // console.log(nodeStack)
-            nodeStack.splice(startNodeIndex,1)
-            // nodeStack = [...nodeStack.slice(nodeStack.indexOf(node)), node]
-            nodeStack = [...nodeStack, node]
-          }
-        }
-
-        // const loop = [...nodeStack.slice(nodeStack.indexOf(node)), node].map(d => idAccessor(d.data));
-        // if (!foundLoops.some(foundLoop => foundLoop.length === loop.length && foundLoop.every((id, idx) => id === loop[idx]))) {
-        //   console.log(loop)
-        //   foundLoops.push(loop);
-        //   onLoopError(loop);
+        // // console.log("start:",nodeStack)
+        // // slice返回一个新的数组对象，以begin开始 ，是包括begin的
+        // // map() 方法返回一个新数组，数组中的元素为原始数组元素调用函数处理后的值
+        // //  some() 方法测试数组中是不是至少有1个元素通过了被提供的函数测试。
+        // //every() 方法测试一个数组内的所有元素是否都能通过某个指定函数的测试
+        // const startNodeIndex = nodeStack.indexOf(node)
+        // const EndNodeIndex = nodeStack.length-1
+        // // console.log("startNodeIndex:",startNodeIndex)
+        // // console.log("EndNodeIndex:",EndNodeIndex)
+        // if (nodeStack[startNodeIndex].dev_net > nodeStack[EndNodeIndex].dev_net) {
+        //   continue
+        //   // nodeStack.splice(EndNodeIndex,1)
+        // } else if (nodeStack[startNodeIndex].dev_net < nodeStack[EndNodeIndex].dev_net) {
+        //   nodeStack.splice(startNodeIndex,1)
+        //   nodeStack = [...nodeStack, node]
+        // } else {
+        //   if (nodeStack[startNodeIndex].dev_type > nodeStack[EndNodeIndex].dev_type) {
+        //     continue
+        //     // nodeStack.splice(EndNodeIndex,1)
+        //   } else {
+        //     // console.log(nodeStack)
+        //     nodeStack.splice(startNodeIndex,1)
+        //     // nodeStack = [...nodeStack.slice(nodeStack.indexOf(node)), node]
+        //     nodeStack = [...nodeStack, node]
+        //   }
         // }
+
+        const loop = [...nodeStack.slice(nodeStack.indexOf(node)), node].map(d => idAccessor(d.data));
+        if (!foundLoops.some(foundLoop => foundLoop.length === loop.length && foundLoop.every((id, idx) => id === loop[idx]))) {
+          console.log(loop)
+          foundLoops.push(loop);
+          onLoopError(loop);
+        }
 
         // console.log("end:",nodeStack)
         continue;

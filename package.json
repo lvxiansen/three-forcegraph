@@ -45,6 +45,7 @@
     "d3-scale-chromatic": "1 - 3",
     "data-joint": "^1.2",
     "kapsule": "^1.13",
+    "lodash": "^4.17.21",
     "ngraph.forcelayout": "^3.3",
     "ngraph.graph": "^20.0",
     "tinycolor2": "^1.4"
