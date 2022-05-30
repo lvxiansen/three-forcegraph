@@ -65,7 +65,7 @@ import getDagDepths from './utils/dagDepths';
 //
 
 const DAG_LEVEL_NODE_RATIO = 2;
-
+// var count = 1
 // support multiple method names for backwards threejs compatibility
 // 支持多个方法名以实现向后兼容
 const setAttributeFn = new three.BufferGeometry().setAttribute ? 'setAttribute' : 'addAttribute';
@@ -113,7 +113,7 @@ export default Kapsule({
         // Increase repulsion on 3D mode for improved spatial separation
         // 增加3D模式上的斥力以改善空间分离
         if (chargeForce) { chargeForce.strength(numDim > 2 ? -60 : -30) }
-        // console.log(state)
+        // console.log("===========")
         if (numDim < 3) { eraseDimension(state.graphData.nodes, 'z'); }
         if (numDim < 2) { eraseDimension(state.graphData.nodes, 'y'); }
 
@@ -167,7 +167,7 @@ export default Kapsule({
     linkDirectionalParticleColor: {},
     linkDirectionalParticleResolution: { default: 4 }, // how many slice segments in the particle sphere's circumference
     forceEngine: { default: 'd3' }, // d3 or ngraph
-    d3AlphaMin: { default: 0 },
+    d3AlphaMin: { default: 0.01 },
     d3AlphaDecay: { default: 0.0228, triggerUpdate: false, onChange(alphaDecay, state) { state.d3ForceLayout.alphaDecay(alphaDecay) }},
     d3AlphaTarget: { default: 0, triggerUpdate: false, onChange(alphaTarget, state) { state.d3ForceLayout.alphaTarget(alphaTarget) }},
     d3VelocityDecay: { default: 0.4, triggerUpdate: false, onChange(velocityDecay, state) { state.d3ForceLayout.velocityDecay(velocityDecay) } },
@@ -231,6 +231,14 @@ export default Kapsule({
       const isD3Sim = state.forceEngine !== 'ngraph';
 
       if (state.engineRunning) { layoutTick(); }
+      // count++
+      // if (count == 2) {
+      //   state.engineRunning = false; // Stop ticking graph
+      //   //节点冷却完毕后会输出aaaaa.但是当拖动节点时，仍会重新输出bbbbb,再次徐楠。
+      //   // console.log("aaaaa");
+      //   //当模拟引擎停止并且布局被冻结时调用的回调函数
+      //   state.onEngineStop();
+      // }
       updateArrows();
       updatePhotons();
 
@@ -238,6 +246,7 @@ export default Kapsule({
 
       //会在走向布局时不断调用
       function layoutTick() {
+        // console.log("次数cishu");
         if (
           //d3AlphaMin:模拟 alpha min 参数的 getter/setter，仅在使用 d3 模拟引擎时适用
           ++state.cntTicks > state.cooldownTicks ||
@@ -249,10 +258,17 @@ export default Kapsule({
           // console.log("aaaaa");
           //当模拟引擎停止并且布局被冻结时调用的回调函数
           state.onEngineStop();
+          state.graphData.nodes.forEach(element => {
+            console.log("id:",element.dev_id,"type:",element.dev_type,element.x,element.y,element.z)
+            // if (element.dev_id == 62 || element.dev_id == 64) {
+            //   console.log("dev_id",element.dev_id,"--",element.x,element.y );
+            // }
+          });
         } else {
+          // console.log(state.d3ForceLayout.alpha());
           state.layout[isD3Sim ? 'tick' : 'step'](); // Tick it
           //有节点晃动时会以很高的频率输出bbbbb，直到节点冷却完毕
-          // console.log("bbbbb");
+          //  console.log(state.d3ForceLayout.alpha(),"bbbbb");
           //在模拟引擎的每个滴答声中调用的回调函数
           state.onEngineTick();
         }
@@ -264,7 +280,6 @@ export default Kapsule({
 
           //getNodePosition是ngraph独有的获取节点位置方法
           const pos = isD3Sim ? node : state.layout.getNodePosition(node[state.nodeId]);
-
           obj.position.x = pos.x;
           obj.position.y = pos.y || 0;
           obj.position.z = pos.z || 0;
@@ -623,10 +638,10 @@ export default Kapsule({
 
   stateInit: () => ({
     d3ForceLayout: d3ForceSimulation()
-      .force('link', d3ForceLink())
-      .force('charge', d3ForceManyBody())
-      .force('center', d3ForceCenter())
-      .force('dagRadial', null)
+      // .force('link', d3ForceLink())
+      // .force('charge', d3ForceManyBody())
+      // .force('center', d3ForceCenter())
+      // .force('dagRadial', null)
       .stop(),
     engineRunning: false
   }),
@@ -1111,9 +1126,14 @@ export default Kapsule({
           state.graphData.nodes.length / (maxDepth || 1) * DAG_LEVEL_NODE_RATIO
           * (['radialin', 'radialout'].indexOf(state.dagMode) !== -1 ? 0.7 : 1)
         );
-
+        // console.log("maxDepth:",maxDepth); //3
+        // console.log("nodes.length:",state.graphData.nodes.length);//211
+        // console.log("dagLevelDistance",dagLevelDistance);//200
         // Fix nodes to x,y,z for dag mode
         // 对于dag模式，将节点固定到x、y、z
+        /**
+         * 如果设置了td,那么fyfn就可以计算，不为undefined。
+         */
         if (state.dagMode) {
           const getFFn = (fix, invert) => node => !fix
             ? undefined
@@ -1134,24 +1154,24 @@ export default Kapsule({
         // 得出最终布局有两步，第一步是获得各点层次位置，第二步是对各点进行相应的布局
         // 相应的布局各个力都行，使用圆环布局最好
         // 为什么使用其他布局也能是分散的圆形？因为各点层次固定后，与其上方节点的位置也是固定的
-        state.d3ForceLayout.force('dagRadial',
-        //是这两个力indexof返回0或1，则不等于-1.进入正确逻辑。
-          ['radialin', 'radialout'].indexOf(state.dagMode) !== -1
-            ? d3ForceRadial(node => {
-                //state.nodeId是id属性，默认示例里是 path
-                //node[state.nodeId] 即 获得路径名
-                //nodeDepths[node[state.nodeId]]获得深度
-                // dagNodeFilter用于指定在 DAG 布局处理期间要忽略的节点,traverse时计算，为false则忽略
-                const nodeDepth = nodeDepths[node[state.nodeId]] || -1;
-                return (state.dagMode === 'radialin' ? maxDepth - nodeDepth : nodeDepth) * dagLevelDistance;
-              })
-              .strength(node => state.dagNodeFilter(node) ? 1 : 0)
-            //这里是径向力是局部的
-            : d3ForceRadial(200)
-            // : d3ForceCenter(0,0)
+        // state.d3ForceLayout.force('dagRadial',
+        // //是这两个力indexof返回0或1，则不等于-1.进入正确逻辑。
+        //   ['radialin', 'radialout'].indexOf(state.dagMode) !== -1
+        //     ? d3ForceRadial(node => {
+        //         //state.nodeId是id属性，默认示例里是 path
+        //         //node[state.nodeId] 即 获得路径名
+        //         //nodeDepths[node[state.nodeId]]获得深度
+        //         // dagNodeFilter用于指定在 DAG 布局处理期间要忽略的节点,traverse时计算，为false则忽略
+        //         const nodeDepth = nodeDepths[node[state.nodeId]] || -1;
+        //         return (state.dagMode === 'radialin' ? maxDepth - nodeDepth : nodeDepth) * dagLevelDistance;
+        //       })
+        //       .strength(node => state.dagNodeFilter(node) ? 1 : 0)
+        //     //这里是径向力是局部的
+        //     : d3ForceRadial(200)
+        //     // : d3ForceCenter(0,0)
 
-            .strength(0.1)//d3ForceRadial().strength(node => state.dagNodeFilter(node) ? 1 : 0)
-        );
+        //     .strength(0.1)//d3ForceRadial().strength(node => state.dagNodeFilter(node) ? 1 : 0)
+        // );
       } else {
         // ngraph
         const graph = ngraph.graph();

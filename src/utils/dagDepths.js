@@ -32,6 +32,7 @@ export default function({ nodes, links }, idAccessor, {
    * graph是一个对象(由键值对组成)，其有很多属性(下面会添加)
    * 每个属性就是一个节点名称('d3'),属性值就是data,out,depth等组成的对象
    */
+  // console.log("----------three-forcegraph");
   const graph = {};
   // console.log(links.length)
   /**
@@ -41,9 +42,9 @@ export default function({ nodes, links }, idAccessor, {
    */
   nodes.forEach(node => graph[idAccessor(node)] = { data: node, out : [], depth: -1, skip: !nodeFilter(node) });
   
-  console.log("nodes:--------------",nodes)
-  console.log("links:--------------",links)
-
+  // console.log("nodes:--------------",nodes)
+  // console.log("links:--------------",links)
+  // console.log("------------------------force-graph");
   /**
    * 得到每个节点的out，如果某个节点为单个节点，则其out为空
    */
@@ -69,9 +70,7 @@ export default function({ nodes, links }, idAccessor, {
   // 发现的环数组
   //Object.values返回 对象的 可枚举属性 的 值 组成的数组
   const foundLoops = [];
-  console.log("!!!!!!!!!!!!!!!!!")
   // removeEdge(Object.values(graph))
-  console.log("@@@@@@@@@@@@")
   //traverse(Object.values(graph)); 
   fixByHard(Object.values(graph))
   
@@ -116,7 +115,7 @@ export default function({ nodes, links }, idAccessor, {
     devnetFilterRule.set(4,3)
     devnetFilterRule.set(8,2)
     devnetFilterRule.set(10,1)
-
+      
     devtypeFilterRule.set(17,4)
     devtypeFilterRule.set(16,3)
     devtypeFilterRule.set(4,2)
@@ -129,7 +128,7 @@ export default function({ nodes, links }, idAccessor, {
     var nettypeUniq = _.uniqWith(nettypeObject,function(a,b){
       return a.dev_net===b.dev_net && a.dev_type ===b.dev_type
     })
-    console.log(nettypeUniq);
+    // console.log(nettypeUniq);
     var layerMap = new Map()
     nettypeUniq.sort(function(a,b){
       if (a.dev_net == b.dev_net) {
@@ -148,7 +147,7 @@ export default function({ nodes, links }, idAccessor, {
     }
   }
   function removeEdge(nodes, visited = [],nodeStack = []) {
-    console.log("start")
+    // console.log("start")
     if (visited.length == nodes.length) {
       return
     }
@@ -177,7 +176,7 @@ export default function({ nodes, links }, idAccessor, {
         continue;
       }
       removeEdge(node.out, [...nodeStack, node])
-      console.log(visited)
+      // console.log(visited)
     }
   }
   function traverse(nodes, nodeStack = [], currentDepth = 0) {
