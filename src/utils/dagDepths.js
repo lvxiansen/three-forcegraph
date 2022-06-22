@@ -23,11 +23,11 @@ export default function({ nodes, links }, idAccessor, {
    * 可以覆盖此方法以在外部处理这种情况并允许图形继续 DAG 处理。
    * 如果遇到循环并且结果是建立层次结构的最大努力，则不能保证严格的图方向性
    * 这里的onLoopError是默认情况下的处理方法，如果声明了state.onDagError则不进入此逻辑
-   * 如果onLoopError有传参，则调用传进来的参数函数 
+   * 如果onLoopError有传参，则调用传进来的参数函数
   */
   onLoopError = loopIds => { throw `qqqqq Invalid DAG structure! Found cycle in node path: ${loopIds.join(' -> ')}.` }
 } = {}) {
-  /** 
+  /**
    * linked graph
    * graph是一个对象(由键值对组成)，其有很多属性(下面会添加)
    * 每个属性就是一个节点名称('d3'),属性值就是data,out,depth等组成的对象
@@ -41,7 +41,7 @@ export default function({ nodes, links }, idAccessor, {
    * 其输出节点为空数组，深度为-1，skip为false
    */
   nodes.forEach(node => graph[idAccessor(node)] = { data: node, out : [], depth: -1, skip: !nodeFilter(node) });
-  
+
   // console.log("nodes:--------------",nodes)
   // console.log("links:--------------",links)
   // console.log("------------------------force-graph");
@@ -71,16 +71,16 @@ export default function({ nodes, links }, idAccessor, {
   //Object.values返回 对象的 可枚举属性 的 值 组成的数组
   const foundLoops = [];
   // removeEdge(Object.values(graph))
-  //traverse(Object.values(graph)); 
+  //traverse(Object.values(graph));
   fixByHard(Object.values(graph))
-  
+
  /**
    * 过滤掉要skip的节点以及返回{节点：层次}的对象
    */
   //assign用于将所有可枚举属性的值从一个或多个源对象分配到目标对象。它将返回目标对象.Object.assign(target, ...sources)
   // 如果参数不是对象，也会转化为对象。
   //entries返回一个给定对象自身可枚举属性的键值对数组=》将对象的属性及属性值 转化为键值对形式的数组
-  //为什么这里是[,node]，因为上面展开成了key,value的数组，这里忽略掉了key。整体仍是filter的第一个参数。 
+  //为什么这里是[,node]，因为上面展开成了key,value的数组，这里忽略掉了key。整体仍是filter的第一个参数。
   const nodeDepths = Object.assign({}, ...Object.entries(graph)
     .filter(([, node]) => !node.skip)
     .map(([id, node]) => ({ [id]: node.depth}))
@@ -111,33 +111,44 @@ export default function({ nodes, links }, idAccessor, {
     // devnetFilterRule.set([10,17],3)
     // devnetFilterRule.set([10,4],2)
     // devnetFilterRule.set([10,35],1)
-    devnetFilterRule.set(1,4)
-    devnetFilterRule.set(4,3)
-    devnetFilterRule.set(8,2)
-    devnetFilterRule.set(10,1)
-      
+    devnetFilterRule.set(4,4)
+    devnetFilterRule.set(8,3)
+    devnetFilterRule.set(1,2)
+    devnetFilterRule.set(11,1)
+
     devtypeFilterRule.set(17,4)
     devtypeFilterRule.set(16,3)
     devtypeFilterRule.set(4,2)
     devtypeFilterRule.set(35,1)
 
+    // devtypeFilterRule.set(16,4)
+    // devtypeFilterRule.set(17,5)
+    // devtypeFilterRule.set(18,1)
+    // devtypeFilterRule.set(19,6)
+    // devtypeFilterRule.set(20,7)
+    // devtypeFilterRule.set(21,8)
+    // devtypeFilterRule.set(22,11)
+    // devtypeFilterRule.set(23,9)
+    // devtypeFilterRule.set(24,10)
+    // devtypeFilterRule.set(25,2)
+
     var nettypeObject = []
     for (let i=0, l=nodes.length; i<l; i++) {
       nettypeObject.push({dev_net:nodes[i].data.dev_net,dev_type:nodes[i].data.dev_type})
     }
+    //取出所有dev_net与dev_type的种类组合
     var nettypeUniq = _.uniqWith(nettypeObject,function(a,b){
       return a.dev_net===b.dev_net && a.dev_type ===b.dev_type
     })
-    // console.log(nettypeUniq);
-    var layerMap = new Map()
+    // 根据实现定义的规则对种类进行排序
     nettypeUniq.sort(function(a,b){
-      if (a.dev_net == b.dev_net) {
-        return devtypeFilterRule.get(b.dev_type) - devtypeFilterRule.get(a.dev_type)
+      if (a["dev_net"] === b["dev_net"]) {
+        return devtypeFilterRule.get(+(b["dev_type"]))- devtypeFilterRule.get(+(a["dev_type"]))
       } else {
-        return devnetFilterRule.get(b.dev_net) - devnetFilterRule.get(a.dev_net)
+        return devnetFilterRule.get(+(b["dev_net"]))- devnetFilterRule.get(+(a["dev_net"]))
       }
     })
-
+    var layerMap = new Map()
     nettypeUniq.forEach(function(element,index){
       layerMap.set(element.dev_net+","+element.dev_type,index)
     })

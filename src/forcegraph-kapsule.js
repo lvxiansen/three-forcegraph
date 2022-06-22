@@ -79,7 +79,7 @@ export default Kapsule({
        * 重新刷新图像,当发生变化时，重新渲染图像
        * @param {*} jsonUrl  节点的nodes和links
        * @param {*} state  state为此时框架的各个参数状态
-       * @return 
+       * @return
        */
       onChange: function(jsonUrl, state) {
         if (jsonUrl && !state.fetchingJson) {
@@ -202,7 +202,7 @@ export default Kapsule({
     //外部暴露接口
     // Expose d3 forces for external manipulation
     // 暴露d3力进行外部操纵
-    // 用于控制 d3 模拟引擎的内力的获取器/设置器 
+    // 用于控制 d3 模拟引擎的内力的获取器/设置器
     d3Force: function(state, forceName, forceFn) {
       if (forceFn === undefined) {
         return state.d3ForceLayout.force(forceName); // Force getter
@@ -259,7 +259,7 @@ export default Kapsule({
           //当模拟引擎停止并且布局被冻结时调用的回调函数
           state.onEngineStop();
           state.graphData.nodes.forEach(element => {
-            console.log("id:",element.dev_id,"type:",element.dev_type,element.x,element.y,element.z)
+            // console.log("id:",element.dev_id,"type:",element.dev_type,element.x,element.y,element.z)
             // if (element.dev_id == 62 || element.dev_id == 64) {
             //   console.log("dev_id",element.dev_id,"--",element.x,element.y );
             // }
@@ -304,7 +304,7 @@ export default Kapsule({
           const end = pos[isD3Sim ? 'target' : 'to'];
 
           if (!start || !end || !start.hasOwnProperty('x') || !end.hasOwnProperty('x')) return; // skip invalid link
-          
+
           //计算所有链接（包括自定义替换）的链接曲线，以便在定向功能中使用
           calcLinkCurve(link); // calculate link curve for all links, including custom replaced, so it can be used in directional functionality
 
@@ -601,7 +601,7 @@ export default Kapsule({
 
       return this;
     },
-    
+
     //返回图中节点的当前边界框.对于计算图的一部分的边界框很有用.
     getGraphBbox: function(state, nodeFilter = () => true) {
       if (!state.initialised) return null;
@@ -715,7 +715,7 @@ export default Kapsule({
             }
 
             let obj;
-            
+
             //如果obj有，则clone.否则新建一个three对象
             if (customObj && !extendObj) {
               obj = customObj;
@@ -1188,7 +1188,7 @@ export default Kapsule({
       ) {
         layout[isD3Sim ? "tick" : "step"]();
       } // Initial ticks before starting to render开始渲染前的初始滴答声
-      
+
       state.layout = layout;
       this.resetCountdown();
     }
